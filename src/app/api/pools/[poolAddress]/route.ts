@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPoolData } from '@cryptoart/unified-indexer';
+import { getPoolData } from '~/lib/indexer';
 import { BASE_CHAIN_ID } from '~/lib/constants';
 import { Address } from 'viem';
 
@@ -31,4 +31,3 @@ export async function GET(
     );
   }
 }
-

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuctionData } from '@cryptoart/unified-indexer';
+import { getAuctionData } from '~/lib/indexer';
 import { BASE_CHAIN_ID } from '~/lib/constants';
 
 // GET /api/listings/[listingId] - Get listing details
@@ -30,4 +30,3 @@ export async function GET(
     );
   }
 }
-
