@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install --legacy-peer-deps",
+  "framework": "nextjs",
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "NEYNAR_API_KEY": "@neynar_api_key",
+    "NEXT_PUBLIC_URL": "@next_public_url",
+    "ALCHEMY_API_KEY": "@alchemy_api_key",
+    "SESSION_PASSWORD": "@session_password"
+  }
+}
