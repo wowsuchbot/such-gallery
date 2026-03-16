@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-serif: Georgia, "Times New Roman", Times, serif;
+  --font-mono: "SF Mono", Monaco, "Cascadia Code", "Liberation Mono", monospace;
+  --font-inter: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Prevent font flash */
+html {
+  font-display: optional;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Newspaper typography - stable fonts */
+h1, h2, h3, .font-serif {
+  font-family: var(--font-serif);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Remove all animations and transitions that might cause twitching */
+* {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Paper-like margins */
+.paper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 48px;
+}
+
+@media (max-width: 768px) {
+  .paper {
+    padding: 16px 24px;
+  }
+}
+
+/* Underline links on hover */
+a {
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
 }
