@@ -2,34 +2,7 @@
 
 import { NextResponse } from 'next/server';
 
-// Note: The Graph gateway requires API key authentication
-// For now, return mock data so the preview UI works
-// TODO: Add GRAPH_API_KEY to .env.local and implement real subgraph queries
-
-const MOCK_LISTINGS: Record<string, any> = {
-  '118': {
-    listingId: '118',
-    name: 'Abstract Composition #42',
-    price: '0.0500 ETH',
-    seller: '0x1234567890abcdef1234567890abcdef12345678',
-    tokenAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
-    tokenId: '42',
-    image: null,
-    status: 'ACTIVE',
-    collection: 'cryptoart.social',
-  },
-  '1': {
-    listingId: '1',
-    name: 'Genesis Piece',
-    price: '1.0000 ETH',
-    seller: '0xabcdef1234567890abcdef1234567890abcdef12',
-    tokenAddress: '0x1234567890abcdef1234567890abcdef12345678',
-    tokenId: '1',
-    image: null,
-    status: 'ACTIVE',
-    collection: 'cryptoart.social',
-  },
-};
+const GRAPH_API_URL = 'https://gateway.thegraph.com/api/subgraphs/id/BFHnXWdnn9gt4tK2jag8enxFcG23Lu43hXaXNmgc44mV';
 
 export async function GET(
   request: Request,
@@ -38,28 +11,74 @@ export async function GET(
   const { id } = await params;
   const listingId = id;
 
-  // Check mock data first
-  if (MOCK_LISTINGS[listingId]) {
-    return NextResponse.json({
-      id: `mock-${listingId}`,
-      ...MOCK_LISTINGS[listingId],
-      createdAt: new Date().toISOString(),
-    });
+  const apiKey = process.env.GRAPH_API_KEY || process.env.NEXT_PUBLIC_GRAPH_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json({ 
+      error: 'GRAPH_API_KEY not configured',
+      hint: 'Add GRAPH_API_KEY to .env.local'
+    }, { status: 500 });
   }
 
-  // For any other listing ID, return a generic mock response
-  // This allows testing the preview UI without real data
-  return NextResponse.json({
-    id: `mock-${listingId}`,
-    listingId,
-    name: `NFT #${listingId}`,
-    price: `${(Math.random() * 0.1).toFixed(4)} ETH`,
-    seller: '0x1234567890abcdef1234567890abcdef12345678',
-    tokenAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
-    tokenId: listingId,
-    image: null,
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-    collection: 'cryptoart.social',
-  });
+  const query = `
+    query Listing($listingId: String!) {
+      listings(where: { listingId: $listingId }) {
+        id
+        listingId
+        tokenAddress
+        tokenId
+        seller
+        initialAmount
+        erc20
+        status
+        createdAt
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(GRAPH_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ query, variables: { listingId } }),
+    });
+
+    const data = await response.json();
+
+    if (data.errors) {
+      console.error('Subgraph errors:', data.errors);
+      return NextResponse.json({ error: data.errors[0]?.message || 'Subgraph error' }, { status: 500 });
+    }
+
+    const listings = data.data?.listings || [];
+
+    if (listings.length === 0) {
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 });
+    }
+
+    const listing = listings[0];
+    const priceEth = listing.initialAmount 
+      ? `${(parseInt(listing.initialAmount) / 1e18).toFixed(4)} ETH`
+      : null;
+
+    return NextResponse.json({
+      id: listing.id,
+      listingId: listing.listingId,
+      tokenAddress: listing.tokenAddress,
+      tokenId: listing.tokenId,
+      seller: listing.seller,
+      price: priceEth,
+      status: listing.status,
+      createdAt: listing.createdAt,
+      name: `NFT #${listing.tokenId}`,
+      image: null,
+      collection: 'cryptoart.social',
+    });
+  } catch (error) {
+    console.error('Error fetching listing:', error);
+    return NextResponse.json({ error: 'Failed to fetch listing' }, { status: 500 });
+  }
 }
