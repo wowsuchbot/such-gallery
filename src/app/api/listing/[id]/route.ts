@@ -4,8 +4,13 @@ import { NextResponse } from 'next/server';
 
 const GRAPH_API_URL = 'https://gateway.thegraph.com/api/subgraphs/id/BFHnXWdnn9gt4tK2jag8enxFcG23Lu43hXaXNmgc44mV';
 
-// Use ipfs.io gateway (more reliable)
+// Gateways for different protocols
 const IPFS_GATEWAY = process.env.IPFS_GATEWAY || 'https://ipfs.io/ipfs';
+const ARWEAVE_GATEWAYS = [
+  'https://ar-io.dev',
+  'https://gateway.irys.xyz',
+  'https://arweave.net',
+];
 
 interface NFTMetadata {
   tokenURI: string;
@@ -15,10 +20,11 @@ interface NFTMetadata {
   description: string | null;
 }
 
-// Convert IPFS URI to gateway URL
-function ipfsToGateway(uri: string | null | undefined): string | null {
+// Convert IPFS or Arweave URI to gateway URL
+function uriToGateway(uri: string | null | undefined): string | null {
   if (!uri) return null;
   
+  // IPFS
   if (uri.startsWith('ipfs://')) {
     const cid = uri.replace('ipfs://', '');
     return `${IPFS_GATEWAY}/${cid}`;
@@ -29,10 +35,57 @@ function ipfsToGateway(uri: string | null | undefined): string | null {
       return `${IPFS_GATEWAY}/${cidMatch[1]}`;
     }
   }
+  
+  // Arweave - use first gateway (fallback handled in fetch)
+  if (uri.startsWith('ar://')) {
+    const txId = uri.replace('ar://', '');
+    return `${ARWEAVE_GATEWAYS[0]}/${txId}`;
+  }
+  
+  // Already HTTP URL
   if (uri.startsWith('http')) {
     return uri;
   }
   return null;
+}
+
+// Fetch with Arweave gateway fallbacks
+async function fetchWithFallback(uri: string): Promise<Response | null> {
+  // Arweave - try multiple gateways
+  if (uri.startsWith('ar://')) {
+    const txId = uri.replace('ar://', '');
+    
+    for (const gateway of ARWEAVE_GATEWAYS) {
+      try {
+        const url = `${gateway}/${txId}`;
+        const res = await fetch(url, { 
+          signal: AbortSignal.timeout(10000),
+          headers: { 'Accept': 'application/json' },
+        });
+        
+        if (res.ok) {
+          return res;
+        }
+      } catch (e) {
+        // Try next gateway
+        continue;
+      }
+    }
+    return null;
+  }
+  
+  // Single gateway fetch for IPFS/HTTP
+  const gatewayUrl = uriToGateway(uri);
+  if (!gatewayUrl) return null;
+  
+  try {
+    return await fetch(gatewayUrl, { 
+      signal: AbortSignal.timeout(15000),
+      headers: { 'Accept': 'application/json' },
+    });
+  } catch (e) {
+    return null;
+  }
 }
 
 // Decode ABI-encoded string from eth_call result
@@ -131,63 +184,68 @@ export async function GET(
       ];
       
       const tokenIdHex = listing.tokenId.padStart(64, '0');
-      const callData = `0xc87b56dd${tokenIdHex}`; // tokenURI(uint256)
       
-      const metadataCall = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_call',
-        params: [{ to: listing.tokenAddress, data: callData }, 'latest']
-      };
-
+      // Try ERC-721 tokenURI first, then ERC-1155 uri
+      const calls = [
+        { name: 'tokenURI', data: `0xc87b56dd${tokenIdHex}` },      // ERC-721
+        { name: 'uri', data: `0x0e89341c${tokenIdHex}` },           // ERC-1155
+      ];
+      
       let rpcResult: string | null = null;
       
-      for (const rpc of rpcEndpoints) {
-        try {
-          const res = await fetch(rpc, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(metadataCall),
-            signal: AbortSignal.timeout(5000),
-          });
-          
-          const json = await res.json();
-          if (json.result && json.result !== '0x' && !json.error) {
-            rpcResult = json.result;
-            break;
+      for (const call of calls) {
+        const metadataCall = {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_call',
+          params: [{ to: listing.tokenAddress, data: call.data }, 'latest']
+        };
+
+        for (const rpc of rpcEndpoints) {
+          try {
+            const res = await fetch(rpc, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(metadataCall),
+              signal: AbortSignal.timeout(5000),
+            });
+            
+            const json = await res.json();
+            if (json.result && json.result !== '0x' && !json.error) {
+              rpcResult = json.result;
+              break;
+            }
+          } catch (e) {
+            // Try next endpoint
           }
-        } catch (e) {
-          // Try next endpoint
         }
+        
+        if (rpcResult) break;
       }
       
       if (rpcResult) {
         const uri = decodeABIString(rpcResult);
         
         if (uri) {
-          const gatewayUrl = ipfsToGateway(uri);
-          
-          if (gatewayUrl) {
-            try {
-              const metaRes = await fetch(gatewayUrl, { 
-                signal: AbortSignal.timeout(10000) 
-              });
+          try {
+            const metaRes = await fetchWithFallback(uri);
+            
+            if (metaRes && metaRes.ok) {
+              const metadata = await metaRes.json();
+              const image = metadata.image || metadata.image_url || metadata.media?.uri || null;
               
-              if (metaRes.ok) {
-                const metadata = await metaRes.json();
-                const image = metadata.image || metadata.image_url || metadata.media?.uri || null;
-                
-                nftMetadata = {
-                  tokenURI: uri,
-                  name: metadata.name || metadata.title || null,
-                  image: image,
-                  imageGateway: ipfsToGateway(image),
-                  description: metadata.description || null,
-                };
-              }
-            } catch (e) {
-              console.error('Failed to fetch metadata from gateway:', e);
+              nftMetadata = {
+                tokenURI: uri,
+                name: metadata.name || metadata.title || null,
+                image: image,
+                imageGateway: uriToGateway(image),
+                description: metadata.description || null,
+              };
+            } else {
+              console.error('Metadata fetch failed for URI:', uri);
             }
+          } catch (e) {
+            console.error('Failed to fetch metadata:', uri, e);
           }
         }
       }
