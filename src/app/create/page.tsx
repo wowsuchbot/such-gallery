@@ -3,16 +3,20 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { parseGalleryLink, GalleryLink } from '@/lib/galleries';
 import { ListingPreview } from '@/components/ListingPreview';
 
 export default function CreateGalleryPage() {
+  const router = useRouter();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [creatorName, setCreatorName] = useState('');
   const [linkInput, setLinkInput] = useState('');
   const [links, setLinks] = useState<GalleryLink[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   function handleAddLink() {
     const trimmed = linkInput.trim();
@@ -53,10 +57,41 @@ export default function CreateGalleryPage() {
     setLinks(links.filter((_, i) => i !== index));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TODO: Save gallery (no backend yet)
-    alert('Gallery creation coming soon! For now, galleries are hardcoded.');
+    
+    if (links.length === 0) {
+      setError('Add at least one link to your gallery');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/galleries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          links,
+          creatorName: creatorName || 'Anonymous',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create gallery');
+      }
+
+      // Navigate to the new gallery
+      router.push(`/gallery/${data.gallery.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create gallery');
+      setSaving(false);
+    }
   }
 
   return (
@@ -82,7 +117,7 @@ export default function CreateGalleryPage() {
           {/* Title */}
           <div>
             <label className="block font-mono text-sm text-gray-600 dark:text-gray-400 mb-2">
-              Title
+              Title *
             </label>
             <input
               type="text"
@@ -108,10 +143,24 @@ export default function CreateGalleryPage() {
             />
           </div>
 
+          {/* Creator Name */}
+          <div>
+            <label className="block font-mono text-sm text-gray-600 dark:text-gray-400 mb-2">
+              Your Name
+            </label>
+            <input
+              type="text"
+              value={creatorName}
+              onChange={(e) => setCreatorName(e.target.value)}
+              placeholder="Anonymous"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 bg-transparent font-mono text-sm focus:outline-none focus:border-black dark:focus:border-white"
+            />
+          </div>
+
           {/* Links */}
           <div>
             <label className="block font-mono text-sm text-gray-600 dark:text-gray-400 mb-2">
-              Links
+              Links *
             </label>
             
             {/* Existing links with previews */}
@@ -182,10 +231,10 @@ export default function CreateGalleryPage() {
           {/* Submit */}
           <button
             type="submit"
-            disabled={links.length === 0}
+            disabled={links.length === 0 || saving}
             className="w-full px-6 py-3 bg-black dark:bg-white text-white dark:text-black font-mono hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Create Gallery {links.length > 0 && `(${links.length} links)`}
+            {saving ? 'Creating...' : `Create Gallery ${links.length > 0 ? `(${links.length} links)` : ''}`}
           </button>
         </form>
       </section>
@@ -194,7 +243,7 @@ export default function CreateGalleryPage() {
       <footer className="border-t border-black dark:border-white mt-auto">
         <div className="max-w-2xl mx-auto px-6 py-8">
           <p className="text-center text-sm text-gray-500 font-mono">
-            No auth required yet · Galleries are not saved
+            No auth required yet · Galleries saved locally
           </p>
         </div>
       </footer>

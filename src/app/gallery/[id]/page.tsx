@@ -1,84 +1,14 @@
-// Gallery detail page
+// Gallery detail page - Full viewport artwork slides
 
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { mockGalleries, GalleryLink } from '@/lib/galleries';
-
-function renderLink(link: GalleryLink, index: number) {
-  switch (link.type) {
-    case 'cryptoart_listing':
-      return (
-        <a
-          key={index}
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block p-4 border border-gray-200 dark:border-gray-800 hover:border-black dark:hover:border-white transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs px-2 py-1 bg-gray-100 dark:bg-gray-900">
-              Listing
-            </span>
-            <span className="font-mono text-sm text-gray-600 dark:text-gray-400">
-              #{link.listingId}
-            </span>
-          </div>
-          <p className="font-mono text-xs text-gray-400 mt-2 truncate">
-            cryptoart.social/listing/{link.listingId}
-          </p>
-        </a>
-      );
-
-    case 'farcaster_cast':
-      return (
-        <a
-          key={index}
-          href={`https://warpcast.com/~/conversations/${link.hash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block p-4 border border-gray-200 dark:border-gray-800 hover:border-black dark:hover:border-white transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
-              Cast
-            </span>
-            {link.author && (
-              <span className="font-mono text-sm text-gray-600 dark:text-gray-400">
-                by @{link.author}
-              </span>
-            )}
-          </div>
-          <p className="font-mono text-xs text-gray-400 mt-2 truncate">
-            {link.hash.slice(0, 10)}...
-          </p>
-        </a>
-      );
-
-    case 'nft':
-      return (
-        <div
-          key={index}
-          className="block p-4 border border-gray-200 dark:border-gray-800"
-        >
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-              NFT
-            </span>
-            <span className="font-mono text-sm text-gray-600 dark:text-gray-400">
-              #{link.tokenId}
-            </span>
-          </div>
-          <p className="font-mono text-xs text-gray-400 mt-2 truncate">
-            {link.contract} · chain {link.chainId}
-          </p>
-        </div>
-      );
-  }
-}
+import { getGalleryById } from '@/lib/gallery-store';
+import { GalleryLink } from '@/lib/galleries';
+import { ArtworkSlide } from '@/components/ArtworkSlide';
 
 export default async function GalleryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const gallery = mockGalleries.find((g) => g.id === id);
+  const gallery = getGalleryById(id);
 
   if (!gallery) {
     notFound();
@@ -90,51 +20,108 @@ export default async function GalleryPage({ params }: { params: Promise<{ id: st
     day: 'numeric',
   });
 
+  // Filter to only cryptoart listings for now (they have preview support)
+  const listingLinks = gallery.links.filter(
+    (link): link is GalleryLink & { type: 'cryptoart_listing' } => link.type === 'cryptoart_listing'
+  );
+
   return (
-    <main className="min-h-screen bg-white dark:bg-black text-black dark:text-white">
-      {/* Header */}
-      <header className="border-b border-black dark:border-white">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          <Link
-            href="/"
-            className="font-mono text-sm text-gray-500 hover:text-black dark:hover:text-white mb-4 inline-block"
-          >
-            ← Back to galleries
-          </Link>
-          <h1 className="font-serif text-4xl md:text-5xl font-bold tracking-tight mt-4">
-            {gallery.title}
-          </h1>
-          <div className="mt-4 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 font-mono">
-            <span>by {gallery.creatorName}</span>
-            <span>·</span>
-            <span>{createdDate}</span>
-            <span>·</span>
-            <span>{gallery.links.length} links</span>
+    <main className="bg-black text-white">
+      {/* Header - Fixed at top */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-sm border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <Link
+                href="/"
+                className="font-mono text-xs text-gray-500 hover:text-white mb-2 inline-block"
+              >
+                ← Back to galleries
+              </Link>
+              <h1 className="font-serif text-2xl md:text-3xl font-bold">
+                {gallery.title}
+              </h1>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-xs text-gray-400">
+                by {gallery.creatorName}
+              </p>
+              <p className="font-mono text-xs text-gray-500">
+                {listingLinks.length} artworks
+              </p>
+            </div>
           </div>
-          {gallery.description && (
-            <p className="mt-6 text-lg text-gray-700 dark:text-gray-300 leading-relaxed">
-              {gallery.description}
-            </p>
-          )}
         </div>
       </header>
 
-      {/* Links */}
-      <section className="max-w-4xl mx-auto px-6 py-12">
-        <h2 className="font-serif text-xl font-bold mb-6">Links</h2>
-        <div className="space-y-3">
-          {gallery.links.map((link, index) => renderLink(link, index))}
+      {/* Gallery description - Scrollable intro section */}
+      <section className="min-h-[60vh] flex items-center justify-center pt-20">
+        <div className="max-w-2xl mx-auto px-6 text-center">
+          <p className="text-lg md:text-xl text-gray-300 leading-relaxed mb-8">
+            {gallery.description}
+          </p>
+          <div className="font-mono text-xs text-gray-500">
+            Created {createdDate} · {gallery.links.length} links
+          </div>
+          <div className="mt-8 animate-bounce text-gray-400">
+            <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+            <span className="text-xs mt-2 block">Scroll to view artworks</span>
+          </div>
         </div>
       </section>
 
+      {/* Artwork slides - Each takes full viewport */}
+      <section className="snap-y snap-mandatory">
+        {listingLinks.map((link, index) => (
+          <div key={link.listingId} className="snap-start">
+            <ArtworkSlide listingId={link.listingId} index={index} />
+          </div>
+        ))}
+      </section>
+
+      {/* Non-listing links section */}
+      {gallery.links.some(l => l.type !== 'cryptoart_listing') && (
+        <section className="min-h-screen bg-gray-950 py-20">
+          <div className="max-w-4xl mx-auto px-6">
+            <h2 className="font-serif text-2xl font-bold mb-8">Additional Links</h2>
+            <div className="space-y-3">
+              {gallery.links.filter(l => l.type !== 'cryptoart_listing').map((link, index) => (
+                <div
+                  key={index}
+                  className="p-4 border border-gray-800 bg-black"
+                >
+                  {link.type === 'farcaster_cast' && (
+                    <a
+                      href={`https://warpcast.com/~/conversations/${link.hash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-purple-400 hover:underline"
+                    >
+                      Farcaster Cast: {link.hash.slice(0, 10)}...
+                    </a>
+                  )}
+                  {link.type === 'nft' && (
+                    <span className="text-gray-400">
+                      NFT: {link.contract.slice(0, 8)}... #{link.tokenId}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Footer */}
-      <footer className="border-t border-black dark:border-white mt-auto">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          <p className="text-center text-sm text-gray-500 font-mono">
+      <footer className="border-t border-white/10 py-8">
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <p className="font-mono text-xs text-gray-500">
             Powered by{' '}
             <a
               href="https://cryptoart.social"
-              className="underline hover:text-black dark:hover:text-white"
+              className="underline hover:text-white"
               target="_blank"
               rel="noopener noreferrer"
             >

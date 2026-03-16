@@ -2,12 +2,21 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { mockGalleries, Gallery } from '@/lib/galleries';
 import { GalleryTeaser } from '@/components/GalleryTeaser';
 
 type SortKey = 'updated' | 'creator' | 'revenue';
+
+interface Gallery {
+  id: string;
+  title: string;
+  description: string;
+  links: any[];
+  creatorName: string;
+  updatedAt: string;
+  totalRevenue: string;
+}
 
 function sortGalleries(galleries: Gallery[], sortBy: SortKey): Gallery[] {
   return [...galleries].sort((a, b) => {
@@ -25,8 +34,27 @@ function sortGalleries(galleries: Gallery[], sortBy: SortKey): Gallery[] {
 }
 
 export default function GalleriesPage() {
+  const [galleries, setGalleries] = useState<Gallery[]>([]);
+  const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortKey>('updated');
-  const sortedGalleries = sortGalleries(mockGalleries, sortBy);
+
+  useEffect(() => {
+    async function fetchGalleries() {
+      try {
+        const res = await fetch('/api/galleries');
+        const data = await res.json();
+        setGalleries(data.galleries || []);
+      } catch (e) {
+        console.error('Failed to fetch galleries:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchGalleries();
+  }, []);
+
+  const sortedGalleries = sortGalleries(galleries, sortBy);
 
   return (
     <main className="min-h-screen bg-white dark:bg-black text-black dark:text-white">
@@ -39,7 +67,7 @@ export default function GalleriesPage() {
                 such.gallery
               </Link>
               <p className="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">
-                All Galleries
+                All Galleries ({galleries.length})
               </p>
             </div>
             <Link
@@ -76,19 +104,35 @@ export default function GalleriesPage() {
 
       {/* Gallery Grid */}
       <section className="max-w-6xl mx-auto px-6 pb-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sortedGalleries.map((gallery) => (
-            <GalleryTeaser
-              key={gallery.id}
-              id={gallery.id}
-              title={gallery.title}
-              description={gallery.description}
-              linkCount={gallery.links.length}
-              creatorName={gallery.creatorName}
-              updatedAt={gallery.updatedAt}
-            />
-          ))}
-        </div>
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="font-mono text-sm text-gray-500">Loading galleries...</p>
+          </div>
+        ) : sortedGalleries.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {sortedGalleries.map((gallery) => (
+              <GalleryTeaser
+                key={gallery.id}
+                id={gallery.id}
+                title={gallery.title}
+                description={gallery.description}
+                linkCount={gallery.links.length}
+                creatorName={gallery.creatorName}
+                updatedAt={gallery.updatedAt}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 border border-dashed border-gray-300 dark:border-gray-700">
+            <p className="text-gray-500 mb-4">No galleries yet</p>
+            <Link
+              href="/create"
+              className="font-mono text-sm underline hover:text-black dark:hover:text-white"
+            >
+              Create the first gallery →
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* Footer */}

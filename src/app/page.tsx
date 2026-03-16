@@ -1,12 +1,13 @@
 // such.gallery - Home page
 
 import Link from 'next/link';
-import { mockGalleries } from '@/lib/galleries';
+import { getAllGalleries } from '@/lib/gallery-store';
 import { GalleryTeaser } from '@/components/GalleryTeaser';
 import { ERC6551Teaser } from '@/components/ERC6551Teaser';
 
 export default function Home() {
-  const featuredGalleries = mockGalleries.slice(0, 3);
+  const galleries = getAllGalleries();
+  const featuredGalleries = galleries.slice(0, 3);
 
   return (
     <main className="min-h-screen bg-white dark:bg-black text-black dark:text-white">
@@ -35,28 +36,44 @@ export default function Home() {
       {/* Featured Galleries */}
       <section className="max-w-6xl mx-auto px-6 py-12">
         <div className="flex justify-between items-center mb-8">
-          <h2 className="font-serif text-2xl font-bold">Featured Galleries</h2>
-          <Link
-            href="/galleries"
-            className="font-mono text-sm text-gray-500 hover:text-black dark:hover:text-white underline"
-          >
-            View all →
-          </Link>
+          <h2 className="font-serif text-2xl font-bold">
+            {galleries.length > 3 ? 'Featured Galleries' : 'Galleries'}
+          </h2>
+          {galleries.length > 3 && (
+            <Link
+              href="/galleries"
+              className="font-mono text-sm text-gray-500 hover:text-black dark:hover:text-white underline"
+            >
+              View all →
+            </Link>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {featuredGalleries.map((gallery) => (
-            <GalleryTeaser
-              key={gallery.id}
-              id={gallery.id}
-              title={gallery.title}
-              description={gallery.description}
-              linkCount={gallery.links.length}
-              creatorName={gallery.creatorName}
-              updatedAt={gallery.updatedAt}
-            />
-          ))}
-        </div>
+        {featuredGalleries.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {featuredGalleries.map((gallery) => (
+              <GalleryTeaser
+                key={gallery.id}
+                id={gallery.id}
+                title={gallery.title}
+                description={gallery.description}
+                linkCount={gallery.links.length}
+                creatorName={gallery.creatorName}
+                updatedAt={gallery.updatedAt}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 border border-dashed border-gray-300 dark:border-gray-700">
+            <p className="text-gray-500 mb-4">No galleries yet</p>
+            <Link
+              href="/create"
+              className="font-mono text-sm underline hover:text-black dark:hover:text-white"
+            >
+              Create the first gallery →
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* ERC-6551 Teaser */}

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "genesis-01",
+    "title": "Genesis Collection",
+    "description": "The first curated selection of works from cryptoart.social artists.",
+    "links": [
+      {
+        "type": "cryptoart_listing",
+        "url": "https://cryptoart.social/listing/118",
+        "listingId": "118"
+      }
+    ],
+    "creatorName": "mxjxn",
+    "creatorFid": 4905,
+    "createdAt": "2026-03-16T00:00:00Z",
+    "updatedAt": "2026-03-16T20:00:00Z",
+    "totalRevenue": "0.0"
+  }
+]
