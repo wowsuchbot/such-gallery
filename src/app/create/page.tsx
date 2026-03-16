@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { parseGalleryLink, GalleryLink } from '@/lib/galleries';
+import { ListingPreview } from '@/components/ListingPreview';
 
 export default function CreateGalleryPage() {
   const [title, setTitle] = useState('');
@@ -20,6 +21,26 @@ export default function CreateGalleryPage() {
     const parsed = parseGalleryLink(trimmed);
     if (!parsed) {
       setError('Invalid link format. Use: cryptoart.social/listing/:id, cast hash, or contract/tokenId/chainId');
+      return;
+    }
+
+    // Check for duplicates
+    const isDuplicate = links.some(link => {
+      if (link.type !== parsed.type) return false;
+      if (link.type === 'cryptoart_listing' && parsed.type === 'cryptoart_listing') {
+        return link.listingId === parsed.listingId;
+      }
+      if (link.type === 'farcaster_cast' && parsed.type === 'farcaster_cast') {
+        return link.hash === parsed.hash;
+      }
+      if (link.type === 'nft' && parsed.type === 'nft') {
+        return link.contract === parsed.contract && link.tokenId === parsed.tokenId;
+      }
+      return false;
+    });
+
+    if (isDuplicate) {
+      setError('This link is already in your gallery');
       return;
     }
 
@@ -93,26 +114,36 @@ export default function CreateGalleryPage() {
               Links
             </label>
             
-            {/* Existing links */}
+            {/* Existing links with previews */}
             {links.length > 0 && (
               <div className="mb-4 space-y-2">
                 {links.map((link, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-800"
-                  >
-                    <span className="font-mono text-sm">
-                      {link.type === 'cryptoart_listing' && `Listing #${link.listingId}`}
-                      {link.type === 'farcaster_cast' && `Cast ${link.hash.slice(0, 10)}...`}
-                      {link.type === 'nft' && `NFT #${link.tokenId}`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveLink(index)}
-                      className="text-gray-400 hover:text-red-500 text-sm"
-                    >
-                      Remove
-                    </button>
+                  <div key={index}>
+                    {link.type === 'cryptoart_listing' ? (
+                      <ListingPreview
+                        listingId={link.listingId}
+                        onRemove={() => handleRemoveLink(index)}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-800">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400">
+                            {link.type === 'farcaster_cast' ? 'CAST' : 'NFT'}
+                          </span>
+                          <span className="font-mono text-sm">
+                            {link.type === 'farcaster_cast' && `${link.hash.slice(0, 10)}...`}
+                            {link.type === 'nft' && `#${link.tokenId}`}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLink(index)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -151,9 +182,10 @@ export default function CreateGalleryPage() {
           {/* Submit */}
           <button
             type="submit"
-            className="w-full px-6 py-3 bg-black dark:bg-white text-white dark:text-black font-mono hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+            disabled={links.length === 0}
+            className="w-full px-6 py-3 bg-black dark:bg-white text-white dark:text-black font-mono hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Create Gallery
+            Create Gallery {links.length > 0 && `(${links.length} links)`}
           </button>
         </form>
       </section>
