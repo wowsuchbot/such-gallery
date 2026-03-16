@@ -12,6 +12,7 @@ interface ListingPreviewData {
   tokenAddress: string;
   tokenId: string;
   image: string | null;
+  imageGateway: string | null;
   status: string;
 }
 
@@ -84,7 +85,13 @@ export function ListingPreview({ listingId, onRemove }: ListingPreviewProps) {
     <div className="flex items-center gap-3 p-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-black">
       {/* Thumbnail */}
       <div className="w-12 h-12 bg-gray-100 dark:bg-gray-900 flex-shrink-0 flex items-center justify-center overflow-hidden">
-        {data.image ? (
+        {data.imageGateway ? (
+          <img 
+            src={data.imageGateway} 
+            alt={data.name}
+            className="w-full h-full object-cover"
+          />
+        ) : data.image ? (
           <img 
             src={data.image} 
             alt={data.name}
@@ -103,16 +110,23 @@ export function ListingPreview({ listingId, onRemove }: ListingPreviewProps) {
           <span className="font-mono text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400">
             #{data.listingId}
           </span>
+          {data.status === 'ACTIVE' && (
+            <span className="font-mono text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400">
+            Active
+          </span>
+          )}
+        </div>
+        <p className="text-sm font-medium truncate mt-0.5">{data.name}</p>
+        <div className="flex items-center gap-2 mt-0.5">
           {data.price && (
-            <span className="font-mono text-xs text-green-600 dark:text-green-400">
+            <span className="font-mono text-xs text-green-600 dark:text-green-400 font-medium">
               {data.price}
             </span>
           )}
+          <span className="font-mono text-xs text-gray-400">
+            {sellerShort}
+          </span>
         </div>
-        <p className="text-sm truncate mt-0.5">{data.name}</p>
-        <p className="font-mono text-xs text-gray-400 truncate">
-          {sellerShort}
-        </p>
       </div>
 
       {/* Actions */}
