@@ -4,12 +4,60 @@ import { NextResponse } from 'next/server';
 
 const GRAPH_API_URL = 'https://gateway.thegraph.com/api/subgraphs/id/BFHnXWdnn9gt4tK2jag8enxFcG23Lu43hXaXNmgc44mV';
 
+// Use ipfs.io gateway (more reliable)
+const IPFS_GATEWAY = process.env.IPFS_GATEWAY || 'https://ipfs.io/ipfs';
+
 interface NFTMetadata {
   tokenURI: string;
   name: string | null;
   image: string | null;
   imageGateway: string | null;
   description: string | null;
+}
+
+// Convert IPFS URI to gateway URL
+function ipfsToGateway(uri: string | null | undefined): string | null {
+  if (!uri) return null;
+  
+  if (uri.startsWith('ipfs://')) {
+    const cid = uri.replace('ipfs://', '');
+    return `${IPFS_GATEWAY}/${cid}`;
+  }
+  if (uri.includes('/ipfs/')) {
+    const cidMatch = uri.match(/\/ipfs\/([^/]+)/);
+    if (cidMatch) {
+      return `${IPFS_GATEWAY}/${cidMatch[1]}`;
+    }
+  }
+  if (uri.startsWith('http')) {
+    return uri;
+  }
+  return null;
+}
+
+// Decode ABI-encoded string from eth_call result
+function decodeABIString(hex: string): string {
+  if (!hex || hex === '0x') return '';
+  
+  const data = hex.slice(2);
+  if (data.length < 128) return '';
+  
+  const lengthHex = data.slice(64, 128);
+  const length = parseInt(lengthHex, 16);
+  
+  if (length === 0 || isNaN(length)) return '';
+  
+  const stringHex = data.slice(128, 128 + length * 2);
+  
+  let result = '';
+  for (let i = 0; i < stringHex.length; i += 2) {
+    const charCode = parseInt(stringHex.substr(i, 2), 16);
+    if (charCode !== 0) {
+      result += String.fromCharCode(charCode);
+    }
+  }
+  
+  return result;
 }
 
 export async function GET(
@@ -74,102 +122,72 @@ export async function GET(
 
     // Fetch NFT metadata from contract
     let nftMetadata: NFTMetadata | null = null;
+    
     try {
-      const baseRPC = process.env.ALCHEMY_BASE_RPC || 'https://base.llamarpc.com';
+      // Try multiple RPC endpoints
+      const rpcEndpoints = [
+        'https://base-rpc.publicnode.com',
+        'https://mainnet.base.org',
+      ];
       
-      // ERC-721 tokenURI(uint256) call
+      const tokenIdHex = listing.tokenId.padStart(64, '0');
+      const callData = `0xc87b56dd${tokenIdHex}`; // tokenURI(uint256)
+      
       const metadataCall = {
         jsonrpc: '2.0',
         id: 1,
         method: 'eth_call',
-        params: [{
-          to: listing.tokenAddress,
-          data: `0xc87b56dd${listing.tokenId.padStart(64, '0')}` // tokenURI(uint256)
-        }, 'latest']
+        params: [{ to: listing.tokenAddress, data: callData }, 'latest']
       };
 
-      const rpcResponse = await fetch(baseRPC, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(metadataCall),
-      });
-
-      const rpcData = await rpcResponse.json();
+      let rpcResult: string | null = null;
       
-      if (rpcData.result && rpcData.result !== '0x') {
-        // Decode the URI (remove 0x prefix, decode hex to string)
-        const hex = rpcData.result.slice(2);
-        let uri = '';
-        for (let i = 0; i < hex.length; i += 2) {
-          const charCode = parseInt(hex.substr(i, 2), 16);
-          if (charCode !== 0) {
-            uri += String.fromCharCode(charCode);
+      for (const rpc of rpcEndpoints) {
+        try {
+          const res = await fetch(rpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(metadataCall),
+            signal: AbortSignal.timeout(5000),
+          });
+          
+          const json = await res.json();
+          if (json.result && json.result !== '0x' && !json.error) {
+            rpcResult = json.result;
+            break;
           }
+        } catch (e) {
+          // Try next endpoint
         }
+      }
+      
+      if (rpcResult) {
+        const uri = decodeABIString(rpcResult);
         
-        // Handle IPFS URIs
-        if (uri.startsWith('ipfs://')) {
-          const cid = uri.replace('ipfs://', '');
-          // Fetch metadata from IPFS gateway
-          try {
-            const metaRes = await fetch(`https://ipfs.io/ipfs/${cid}`, { 
-              signal: AbortSignal.timeout(5000) 
-            });
-            const metadata = await metaRes.json();
-            
-            let imageGateway: string | null = null;
-            const image = metadata.image || metadata.image_url || null;
-            
-            // Convert IPFS image URLs to gateway URLs
-            if (image?.startsWith('ipfs://')) {
-              const imageCid = image.replace('ipfs://', '');
-              imageGateway = `https://ipfs.io/ipfs/${imageCid}`;
+        if (uri) {
+          const gatewayUrl = ipfsToGateway(uri);
+          
+          if (gatewayUrl) {
+            try {
+              const metaRes = await fetch(gatewayUrl, { 
+                signal: AbortSignal.timeout(10000) 
+              });
+              
+              if (metaRes.ok) {
+                const metadata = await metaRes.json();
+                const image = metadata.image || metadata.image_url || metadata.media?.uri || null;
+                
+                nftMetadata = {
+                  tokenURI: uri,
+                  name: metadata.name || metadata.title || null,
+                  image: image,
+                  imageGateway: ipfsToGateway(image),
+                  description: metadata.description || null,
+                };
+              }
+            } catch (e) {
+              console.error('Failed to fetch metadata from gateway:', e);
             }
-            
-            nftMetadata = {
-              tokenURI: uri,
-              name: metadata.name || metadata.title || null,
-              image: image,
-              imageGateway: imageGateway,
-              description: metadata.description || null,
-            };
-          } catch (e) {
-            console.error('Failed to fetch IPFS metadata:', e);
-            // Fallback to just showing the IPFS link
-            nftMetadata = {
-              tokenURI: uri,
-              imageGateway: `https://ipfs.io/ipfs/${cid}`,
-              name: null,
-              image: null,
-              description: null,
-            };
-          }
-        } else if (uri.startsWith('http')) {
-          // HTTP URI - fetch metadata
-          try {
-            const metaRes = await fetch(uri, { 
-              signal: AbortSignal.timeout(5000) 
-            });
-            const metadata = await metaRes.json();
-            
-            let imageGateway: string | null = null;
-            const image = metadata.image || metadata.image_url || null;
-            
-            // Convert IPFS image URLs to gateway URLs
-            if (image?.startsWith('ipfs://')) {
-              const imageCid = image.replace('ipfs://', '');
-              imageGateway = `https://ipfs.io/ipfs/${imageCid}`;
-            }
-            
-            nftMetadata = {
-              tokenURI: uri,
-              name: metadata.name || metadata.title || null,
-              image: image,
-              imageGateway: imageGateway,
-              description: metadata.description || null,
-            };
-          } catch (e) {
-            console.error('Failed to fetch HTTP metadata:', e);
           }
         }
       }
@@ -186,7 +204,6 @@ export async function GET(
       price: priceEth,
       status: listing.status,
       createdAt: listing.createdAt,
-      // NFT metadata
       name: nftMetadata?.name || `NFT #${listing.tokenId}`,
       image: nftMetadata?.image || null,
       imageGateway: nftMetadata?.imageGateway || null,
